@@ -29,10 +29,13 @@ if not exist "out\libatrac9.a" (
             exit /b 1
         )
     )
-    ar rcs out\libatrac9.a out\atrac9\*.o
-    if errorlevel 1 (
-        echo Failed to create out\libatrac9.a
-        exit /b 1
+    if exist "out\libatrac9.a" del "out\libatrac9.a"
+    for %%o in (out\atrac9\*.o) do (
+        ar rcs out\libatrac9.a "%%o"
+        if errorlevel 1 (
+            echo Failed to create out\libatrac9.a
+            exit /b 1
+        )
     )
     echo Built out\libatrac9.a
 )
