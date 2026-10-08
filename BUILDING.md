@@ -26,11 +26,21 @@ You need Windows 10 or 11 (64-bit), a GPU with Vulkan 1.3 support and current dr
 
 You **don't** need to edit any environment variables or PATH. The scripts find everything on their own.
 
+## Preparing your game files
+
+The port needs a decrypted dump of **your own copy** of Bloodborne (`CUSA03173`) with the **1.09 update merged in**. No game files are included or provided. The base game alone (version 1.00) will not run: the launcher stops with "Game File Verification Failed".
+
+If you have the game and the update as two `.pkg` files:
+
+1. **Extract both packages** with a PS4 PKG extractor (shadPS4's package installer works). Extracting a package gives you folders like `Image0` (the game, including `eboot.bin`) and `Sc0` (the console's `sce_sys` metadata).
+2. **Merge the update into the base game.** Copy everything from the extracted 1.09 update over the extracted base game and replace files when asked. `eboot.bin` must come from the update.
+3. **Check that `param.sfo` is where the port looks for it.** The folder you give the launcher needs `sce_sys\param.sfo`. If you only have `Sc0\param.sfo`, copy it to `Image0\sce_sys\param.sfo`.
+
+The launcher checks the result and tells you what is missing, for example `Only Bloodborne CUSA03173 with update 1.09 is supported` or `No such file ... sce_sys\param.sfo`.
+
 ## Playing
 
-The port needs a decrypted dump of **your own copy** of Bloodborne: the `CUSA03173` folder containing `eboot.bin`, updated to **version 1.09**. No game files are included or provided.
-
-In the launcher, select that folder (or the `eboot.bin` inside it), pick your settings and patches, and press start.
+In the launcher, select your prepared game folder (or the `eboot.bin` inside it, for example `CUSA03173\Image0\eboot.bin`), pick your settings and patches, and press start.
 
 ## Troubleshooting
 
@@ -41,6 +51,9 @@ In the launcher, select that folder (or the `eboot.bin` inside it), pick your se
 | `Python not found` from the launcher | Install Python from python.org (not the Microsoft Store), then try again. |
 | Setup fails partway | Run `setup.bat` again. If it fails at the same step, copy the first error message and ask for help. |
 | Game won't start: `vulkan-1.dll` missing | Update your graphics drivers. That DLL comes from the driver. |
+| `Game File Verification Failed` (`missing_update`, `other_title`) | The game folder is the base game or another edition. Merge the 1.09 update (see "Preparing your game files"). |
+| `prepare failed: ... sce_sys\param.sfo` | Copy `Sc0\param.sfo` to `Image0\sce_sys\param.sfo`. |
+| Process exits with code `3221225781` (`0xC0000135`) right after "Launching" | A runtime DLL is missing from `out\`. Run `python scripts\stage_dlls.py` from the project folder (needs MSYS2 in `C:\msys64`). |
 
 ## For developers: what the setup does
 

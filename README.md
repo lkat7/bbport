@@ -45,8 +45,8 @@ This repository adapts the original Linux codebase specifically for Windows syst
   - AMD Radeon RX 400-series or newer.
   - Intel Arc A-series or newer.
 - **Processor**: x86-64 processor with AVX2 support.
-- **Python**: Python 3.10 or newer (needed for the patch compiler and launcher).
-- **Game Files**: Decrypted `CUSA03173` directory containing `eboot.bin` (version 1.09).
+- **Python**: Python 3.10 or newer from [python.org](https://www.python.org/downloads/windows/), with "Add python.exe to PATH" ticked. The Microsoft Store version is not found by the launcher.
+- **Game Files**: Decrypted `CUSA03173` directory containing `eboot.bin` with the 1.09 update merged in. See [Preparing your game files](BUILDING.md#preparing-your-game-files).
 
 ### Build Dependencies (Only if compiling from source)
 - MinGW-w64 GCC (via [w64devkit](https://github.com/skeeto/w64devkit) or MSYS2 MinGW64).
