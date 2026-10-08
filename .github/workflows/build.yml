@@ -1,0 +1,56 @@
+name: Windows build
+
+# Builds out\bbport.exe with MSYS2 and packages a ready-to-run zip.
+# Push a tag like v1.0 to publish it as a GitHub Release; any run can also be
+# started from the Actions tab, and its zip is kept as a workflow artifact.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The runner's preinstalled MSYS2 lives at C:\msys64, where build.bat looks.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          release: false
+          update: true
+
+      - name: Install build dependencies
+        shell: msys2 {0}
+        run: tr -d '\r' < scripts/setup_msys2.sh | bash -s
+
+      - name: Build
+        shell: cmd
+        run: call build.bat
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $dist = "dist/bbport"
+          New-Item -ItemType Directory -Force "$dist/out" | Out-Null
+          Copy-Item out/bbport.exe, out/bb-gpu-capabilities.exe, out/*.dll "$dist/out/"
+          Copy-Item launcher.py, launch_gui.bat, run.bat, LICENSE, README.md, BUILDING.md $dist
+          Copy-Item -Recurse patches, scripts $dist
+          Get-ChildItem $dist -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+          Compress-Archive -Path $dist -DestinationPath dist/bbport-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bbport-windows-x64
+          path: dist/bbport-windows-x64.zip
+
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/bbport-windows-x64.zip

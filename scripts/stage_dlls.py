@@ -1,5 +1,13 @@
+"""Copy the MinGW runtime DLLs that out/*.exe need next to them.
+
+Walks each executable's PE import table recursively and copies every DLL found
+in the MinGW bin directories. DLL names carry version numbers (avcodec-63.dll)
+that change with MSYS2 updates, so nothing is hardcoded. System DLLs are never
+copied, and vulkan-1.dll must come from the GPU driver.
+"""
 import os
 import shutil
+import struct
 import sys
 from pathlib import Path
 
@@ -12,48 +20,84 @@ search_dirs = [
 ]
 if os.environ.get("SDL3_DIR"):
     search_dirs.append(Path(os.environ["SDL3_DIR"]) / "bin")
+search_dirs = [d for d in search_dirs if d.is_dir()]
 
-for p in os.environ.get("PATH", "").split(os.pathsep):
-    if p.strip():
-        search_dirs.append(Path(p.strip()))
+SKIP = {"vulkan-1.dll"}
 
-dlls = [
-    'SDL3.dll',
-    'libxxhash.dll','libzstd.dll','zlib1.dll','liblzma-5.dll','libbz2-1.dll',
-    'libiconv-2.dll','libintl-8.dll','libbrotlicommon.dll','libbrotlidec.dll',
-    'libbrotlienc.dll','libglib-2.0-0.dll','libgmodule-2.0-0.dll','libgobject-2.0-0.dll',
-    'libgio-2.0-0.dll','libpcre2-8-0.dll','libffi-8.dll','libwinpthread-1.dll',
-    'libgcc_s_seh-1.dll','libstdc++-6.dll','libspeex-1.dll','libtheoradec-1.dll',
-    'libtheoraenc-1.dll','libvorbis-0.dll','libvorbisenc-2.dll','libvorbisfile-3.dll',
-    'libogg-0.dll','libopus-0.dll','libvpx-1.dll','libdav1d-7.dll','libva.dll',
-    'libmfx-1.dll','libva_win32.dll','libgsm.dll','libmp3lame-0.dll',
-    'libopencore-amrnb-0.dll','libopencore-amrwb-0.dll','libopenjp2-7.dll','librav1e.dll',
-    'libsharpyuv-0.dll','libwebp-7.dll','libwebpmux-3.dll','libsnappy.dll','libsoxr.dll',
-    'libtwolame-0.dll','libx264-166.dll','libx265.dll','libxvidcore-4.dll',
-    'libxml2-16.dll','libbluray-2.dll','libgmp-10.dll','libgnutls-30.dll',
-    'libhogweed-6.dll','libnettle-8.dll','libp11-kit-0.dll','libtasn1-6.dll',
-    'libidn2-0.dll','libunistring-5.dll','libfontconfig-1.dll','libfreetype-6.dll',
-    'libfribidi-0.dll','libharfbuzz-0.dll','libgraphite2.dll','libthai-0.dll',
-    'libdatrie-1.dll','libpango-1.0-0.dll','libpangocairo-1.0-0.dll','libpangoft2-1.0-0.dll',
-    'libpangowin32-1.0-0.dll','libcairo-2.dll','libcairo-gobject-2.dll','libpixman-1-0.dll',
-    'libpng16-16.dll','libdeflate.dll','libjpeg-8.dll','libjbig-0.dll','libLerc.dll',
-    'libtiff-6.dll','libexpat-1.dll','liblcms2-2.dll','avcodec-62.dll','avformat-62.dll',
-    'avutil-60.dll','swresample-6.dll','swscale-9.dll','libZydis.dll','libZycore.dll'
-]
+
+def pe_imports(path):
+    """Return the DLL names in a PE file's import table."""
+    data = path.read_bytes()
+    if data[:2] != b"MZ":
+        return []
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe:pe + 4] != b"PE\0\0":
+        return []
+    nsec, = struct.unpack_from("<H", data, pe + 6)
+    optsize, = struct.unpack_from("<H", data, pe + 20)
+    opt = pe + 24
+    magic, = struct.unpack_from("<H", data, opt)
+    ddir = opt + (112 if magic == 0x20B else 96)
+    imp_rva, = struct.unpack_from("<I", data, ddir + 8)
+    if not imp_rva:
+        return []
+    sections = []
+    for i in range(nsec):
+        s = opt + optsize + i * 40
+        vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", data, s + 8)
+        sections.append((va, max(vsize, rawsize), rawptr))
+
+    def off(rva):
+        for va, size, raw in sections:
+            if va <= rva < va + size:
+                return rva - va + raw
+        return None
+
+    names = []
+    p = off(imp_rva)
+    while p is not None and p + 20 <= len(data):
+        name_rva = struct.unpack_from("<I", data, p + 12)[0]
+        if not name_rva:
+            break
+        n = off(name_rva)
+        if n is not None:
+            names.append(data[n:data.index(b"\0", n)].decode("ascii", "replace"))
+        p += 20
+    return names
+
+
+def find(dll):
+    for d in search_dirs:
+        src = d / dll
+        if src.is_file():
+            return src
+    return None
+
 
 staged = 0
-for d in dlls:
-    dst = out / d
-    if dst.exists():
-        continue
-    for sdir in search_dirs:
-        src = sdir / d
-        if src.is_file():
+missing = set()
+seen = set()
+queue = sorted(out.glob("*.exe"))
+while queue:
+    for dll in pe_imports(queue.pop()):
+        key = dll.lower()
+        if key in seen or key in SKIP:
+            continue
+        seen.add(key)
+        src = find(dll)
+        if src is None:
+            continue  # system DLL (kernel32, user32, ...)
+        dst = out / src.name
+        if not dst.exists():
             try:
                 shutil.copy2(src, dst)
                 staged += 1
-                break
             except OSError:
-                pass
+                missing.add(dll)
+                continue
+        queue.append(dst)
 
-print(f"Runtime DLL staging complete ({staged} new DLLs staged).")
+print(f"Runtime DLL staging complete ({staged} new DLLs staged, {len(seen)} imports checked).")
+if missing:
+    print("Could not copy: " + ", ".join(sorted(missing)), file=sys.stderr)
+    sys.exit(1)

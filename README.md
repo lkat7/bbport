@@ -54,12 +54,16 @@ This repository adapts the original Linux codebase specifically for Windows syst
 - Ninja build tool.
 - SDL3 development libraries.
 - Vulkan SDK or Vulkan-Headers.
+- fmt, Boost, tsl-robin-map, VulkanMemoryAllocator, xxhash, Zydis, FFmpeg (all MSYS2 packages).
+- magic_enum, miniz 3.1+ and xbyak, which MSYS2 doesn't package (`scripts/setup_msys2.sh` installs them).
 
 ---
 
 ## Building and Running
 
 ### 1. Build from Source
+
+> **Easiest:** see [BUILDING.md](BUILDING.md) for a prebuilt download, or run `setup.bat`, which installs every dependency and builds everything automatically.
 
 Clone the repository recursively:
 ```cmd
